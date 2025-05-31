@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código de la aplicación
 COPY app.py .
+COPY gunicorn.conf.py .
 
 # Crear directorio para archivos temporales
 RUN mkdir -p /tmp/uploads
@@ -28,4 +29,4 @@ RUN mkdir -p /tmp/uploads
 EXPOSE 5000
 
 # Comando para ejecutar la aplicación
-CMD ["python", "app.py"]
+CMD ["sh", "-c", "if [ \"$FLASK_ENV\" = \"development\" ]; then python app.py; else gunicorn -c gunicorn.conf.py app:app; fi"]

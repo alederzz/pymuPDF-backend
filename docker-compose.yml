@@ -12,6 +12,9 @@ services:
       - UPLOAD_FOLDER=${UPLOAD_FOLDER:-/tmp/uploads}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-pdf}
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-2}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-120}
+      - GUNICORN_MAX_REQUESTS=${GUNICORN_MAX_REQUESTS:-1000}
     volumes:
       - ./uploads:/tmp/uploads
     restart: unless-stopped

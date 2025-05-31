@@ -1,4 +1,6 @@
-# Backend PyMuPDF con Docker
+| `GUNICORN_WORKERS` | Número de workers de Gunicorn | `2` |
+| `GUNICORN_TIMEOUT` | Timeout de requests (segundos) | `120` |
+| `GUNICORN_MAX_REQUESTS` | Máximo requests por worker | `1000` |# Backend PyMuPDF con Docker
 
 Backend HTTP para procesar PDFs usando PyMuPDF, diseñado para integrarse con n8n mediante webhooks.
 
@@ -99,6 +101,8 @@ LOG_LEVEL=WARNING
 HOST_PORT=8080
 MAX_CONTENT_LENGTH=104857600  # 100MB
 HEALTH_CHECK_INTERVAL=60s
+GUNICORN_WORKERS=4
+GUNICORN_TIMEOUT=300
 ```
 
 ### Múltiples formatos (experimental)
@@ -275,12 +279,19 @@ docker-compose logs -f pymupdf-backend
 
 ## Solución de Problemas
 
+### Error de servidor de desarrollo en producción
+
+El contenedor ahora usa **Gunicorn** automáticamente en producción:
+- `FLASK_ENV=production` → Usa Gunicorn (recomendado)
+- `FLASK_ENV=development` → Usa servidor Flask (solo desarrollo)
+
 ### Error de memoria con PDFs grandes
 
-```dockerfile
-# Añadir al Dockerfile
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONOPTIMIZE=1
+```bash
+# En .env - aumentar workers y timeout
+GUNICORN_WORKERS=4
+GUNICORN_TIMEOUT=300
+MAX_CONTENT_LENGTH=52428800  # 50MB
 ```
 
 ### Logs de debug
