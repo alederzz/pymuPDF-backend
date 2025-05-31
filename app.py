@@ -9,15 +9,23 @@ import logging
 
 app = Flask(__name__)
 
-# Configuración
-UPLOAD_FOLDER = '/tmp/uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
+# Configuración desde variables de entorno
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
+MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 16777216))  # 16MB por defecto
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+ALLOWED_EXTENSIONS = set(os.environ.get('ALLOWED_EXTENSIONS', 'pdf').split(','))
+
+# Configurar Flask
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 # Crear directorio de uploads si no existe
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL.upper()),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 def allowed_file(filename):
@@ -26,7 +34,16 @@ def allowed_file(filename):
 @app.route('/health', methods=['GET'])
 def health_check():
     """Endpoint de health check"""
-    return jsonify({"status": "healthy", "service": "pymupdf-backend"})
+    return jsonify({
+        "status": "healthy", 
+        "service": "pymupdf-backend",
+        "config": {
+            "max_content_length": MAX_CONTENT_LENGTH,
+            "allowed_extensions": list(ALLOWED_EXTENSIONS),
+            "upload_folder": UPLOAD_FOLDER,
+            "log_level": LOG_LEVEL
+        }
+    })
 
 @app.route('/webhook/extract-text', methods=['POST'])
 def extract_text_webhook():

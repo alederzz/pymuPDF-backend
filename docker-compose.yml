@@ -4,16 +4,20 @@ services:
   pymupdf-backend:
     build: .
     ports:
-      - "5001:5000"
+      - "${HOST_PORT:-5001}:${CONTAINER_PORT:-5000}"
     environment:
-      - PORT=5000
-      - FLASK_ENV=production
+      - PORT=${CONTAINER_PORT:-5000}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - MAX_CONTENT_LENGTH=${MAX_CONTENT_LENGTH:-16777216}
+      - UPLOAD_FOLDER=${UPLOAD_FOLDER:-/tmp/uploads}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-pdf}
     volumes:
       - ./uploads:/tmp/uploads
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTAINER_PORT:-5000}/health"]
+      interval: ${HEALTH_CHECK_INTERVAL:-30s}
+      timeout: ${HEALTH_CHECK_TIMEOUT:-10s}
+      retries: ${HEALTH_CHECK_RETRIES:-3}
+      start_period: ${HEALTH_CHECK_START_PERIOD:-40s}

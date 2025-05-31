@@ -10,25 +10,101 @@ Backend HTTP para procesar PDFs usando PyMuPDF, diseñado para integrarse con n8
 - 🐳 **Containerizado con Docker**
 - 🔗 **Compatible con n8n webhooks**
 - 📝 **Soporte para archivos y base64**
+- ⚙️ **Completamente configurable con variables de entorno**
 
 ## Instalación y Uso
 
-### 1. Clonar y construir
+### 1. Configuración inicial
 
 ```bash
 # Clonar el proyecto
 git clone <tu-repo>
 cd pymupdf-backend
 
-# Construir y ejecutar con Docker Compose
-docker-compose up -d
+# Copiar archivo de configuración
+cp .env.example .env
+
+# Editar configuración (opcional)
+nano .env
 ```
 
-### 2. Verificar funcionamiento
+### 2. Configuración con variables de entorno
+
+Crea un archivo `.env` basado en `.env.example`:
 
 ```bash
-# Health check
-curl http://localhost:5000/health
+# Puerto del host (el que usas para conectarte)
+HOST_PORT=5001
+
+# Puerto interno del contenedor
+CONTAINER_PORT=5000
+
+# Entorno de Flask
+FLASK_ENV=production
+
+# Tamaño máximo de archivo (16MB = 16777216 bytes)
+MAX_CONTENT_LENGTH=16777216
+
+# Nivel de logging
+LOG_LEVEL=INFO
+
+# Extensiones permitidas
+ALLOWED_EXTENSIONS=pdf
+```
+
+### 3. Ejecutar el servicio
+
+```bash
+# Construir y ejecutar
+docker-compose up -d
+
+# Ver logs
+docker-compose logs -f
+
+# Verificar funcionamiento
+curl http://localhost:5001/health
+```
+
+## Variables de Entorno Disponibles
+
+| Variable | Descripción | Valor por defecto |
+|----------|-------------|-------------------|
+| `HOST_PORT` | Puerto del host para conectarse | `5001` |
+| `CONTAINER_PORT` | Puerto interno del contenedor | `5000` |
+| `FLASK_ENV` | Entorno de Flask | `production` |
+| `MAX_CONTENT_LENGTH` | Tamaño máximo de archivo (bytes) | `16777216` (16MB) |
+| `UPLOAD_FOLDER` | Directorio de uploads interno | `/tmp/uploads` |
+| `LOG_LEVEL` | Nivel de logging | `INFO` |
+| `ALLOWED_EXTENSIONS` | Extensiones permitidas | `pdf` |
+| `HEALTH_CHECK_INTERVAL` | Intervalo de health check | `30s` |
+| `HEALTH_CHECK_TIMEOUT` | Timeout de health check | `10s` |
+| `HEALTH_CHECK_RETRIES` | Reintentos de health check | `3` |
+
+## Configuraciones Comunes
+
+### Desarrollo local
+```bash
+# .env para desarrollo
+FLASK_ENV=development
+LOG_LEVEL=DEBUG
+HOST_PORT=5000
+MAX_CONTENT_LENGTH=52428800  # 50MB
+```
+
+### Producción con más capacidad
+```bash
+# .env para producción
+FLASK_ENV=production
+LOG_LEVEL=WARNING
+HOST_PORT=8080
+MAX_CONTENT_LENGTH=104857600  # 100MB
+HEALTH_CHECK_INTERVAL=60s
+```
+
+### Múltiples formatos (experimental)
+```bash
+# Permitir otros formatos además de PDF
+ALLOWED_EXTENSIONS=pdf,docx,txt
 ```
 
 ## Endpoints Disponibles
@@ -41,7 +117,7 @@ Extrae todo el texto del PDF, página por página.
 ```bash
 curl -X POST \
   -F "file=@documento.pdf" \
-  http://localhost:5000/webhook/extract-text
+  http://localhost:5001/webhook/extract-text
 ```
 
 **Ejemplo con base64:**
@@ -49,7 +125,7 @@ curl -X POST \
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{"pdf_base64": "JVBERi0xLjQKJe..."}' \
-  http://localhost:5000/webhook/extract-text
+  http://localhost:5001/webhook/extract-text
 ```
 
 **Respuesta:**
@@ -75,7 +151,7 @@ Extrae todas las imágenes del PDF en formato base64.
 ```bash
 curl -X POST \
   -F "file=@documento.pdf" \
-  http://localhost:5000/webhook/extract-images
+  http://localhost:5001/webhook/extract-images
 ```
 
 **Respuesta:**
@@ -102,7 +178,7 @@ Obtiene metadatos y información general del PDF.
 ```bash
 curl -X POST \
   -F "file=@documento.pdf" \
-  http://localhost:5000/webhook/pdf-info
+  http://localhost:5001/webhook/pdf-info
 ```
 
 **Respuesta:**
@@ -124,7 +200,7 @@ curl -X POST \
 ### 1. Configurar Webhook en n8n
 
 1. Añade un nodo **Webhook** en tu workflow
-2. Configura la URL: `http://tu-servidor:5000/webhook/extract-text`
+2. Configura la URL: `http://tu-servidor:5001/webhook/extract-text`
 3. Método: `POST`
 4. Tipo de respuesta: `JSON`
 
@@ -135,7 +211,7 @@ curl -X POST \
 ```
 
 **Configuración del nodo HTTP Request:**
-- URL: `http://localhost:5000/webhook/extract-text`
+- URL: `http://localhost:5001/webhook/extract-text`
 - Método: POST
 - Body: Binary (para archivos) o JSON (para base64)
 
@@ -156,21 +232,45 @@ return [
 
 ## Configuración Avanzada
 
-### Variables de entorno
+### Cambiar configuración sin reconstruir
 
-```yaml
-environment:
-  - PORT=5000
-  - FLASK_ENV=production
-  - MAX_CONTENT_LENGTH=16777216  # 16MB
+```bash
+# Detener servicio
+docker-compose down
+
+# Editar .env
+nano .env
+
+# Reiniciar con nueva configuración
+docker-compose up -d
 ```
 
-### Personalización de límites
+### Configuración de límites de memoria y CPU
 
-Edita `app.py` para cambiar límites:
+```yaml
+# Añadir al docker-compose.yml
+services:
+  pymupdf-backend:
+    # ... configuración existente
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+```
 
-```python
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+### Personalización de logging avanzado
+
+```bash
+# En .env para logging detallado
+LOG_LEVEL=DEBUG
+FLASK_ENV=development
+
+# Ver logs en tiempo real
+docker-compose logs -f pymupdf-backend
 ```
 
 ## Solución de Problemas
@@ -193,7 +293,21 @@ docker-compose logs -f pymupdf-backend
 ### Verificar salud del servicio
 
 ```bash
-curl http://localhost:5000/health
+# Health check básico
+curl http://localhost:5001/health
+
+# Health check con configuración
+curl -s http://localhost:5001/health | jq '.config'
+```
+
+### Problemas de configuración
+
+```bash
+# Ver configuración actual
+docker-compose exec pymupdf-backend env | grep -E "(PORT|FLASK|MAX_|LOG_)"
+
+# Verificar variables de entorno
+docker-compose config
 ```
 
 ## Desarrollo Local
@@ -217,11 +331,13 @@ python app.py
 ### Con Docker para desarrollo
 
 ```bash
-# Modo desarrollo con auto-reload
+# Modo desarrollo con variables de entorno
 docker run -it --rm \
-  -p 5000:5000 \
+  -p 5001:5000 \
   -v $(pwd):/app \
   -e FLASK_ENV=development \
+  -e LOG_LEVEL=DEBUG \
+  -e MAX_CONTENT_LENGTH=52428800 \
   pymupdf-backend
 ```
 
