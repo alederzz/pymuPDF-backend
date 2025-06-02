@@ -81,7 +81,7 @@ def extract_text_webhook():
         # Extraer texto de todas las páginas
         text_content = []
         for page_num in range(doc.page_count):
-            page = doc[page_num]
+            page = doc.load_page(page_num)
             text = page.get_text()
             text_content.append({
                 "page": page_num + 1,
@@ -137,7 +137,7 @@ def extract_images_webhook():
 
         images = []
         for page_num in range(doc.page_count):
-            page = doc[page_num]
+            page = doc.load_page(page_num)
             image_list = page.get_images()
 
             for img_index, img in enumerate(image_list):
@@ -207,7 +207,7 @@ def pdf_info_webhook():
         # Contar páginas e imágenes
         total_images = 0
         for page_num in range(doc.page_count):
-            page = doc[page_num]
+            page = doc.load_page(page_num)
             total_images += len(page.get_images())
 
         doc.close()
