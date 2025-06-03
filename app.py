@@ -47,26 +47,62 @@ def health_check():
 def extract_text_webhook():
     """Extrae texto de un PDF mediante webhook"""
     try:
-        # Verificar si hay archivo en la petición
-        if 'file' not in request.files:
-            # Intentar obtener archivo como base64
-            data = request.get_json()
-            if data and 'pdf_base64' in data:
-                pdf_data = base64.b64decode(data['pdf_base64'])
-                password = data.get('password')
-            else:
-                return jsonify({"error": "No PDF file provided"}), 400
-        else:
+        logger.debug("Inicio de extracción de texto")
+        pdf_data = None
+        password = None
+        source = "unknown"
+
+        # Verificar si hay archivo en la petición (multipart)
+        if 'file' in request.files:
+            logger.debug("PDF recibido como archivo binario (multipart/form-data)")
             file = request.files['file']
-            if file.filename == '' or not allowed_file(file.filename):
-                return jsonify({"error": "Invalid or missing PDF file"}), 400
+            if file.filename == '':
+                logger.warning("Archivo recibido pero sin nombre")
+                return jsonify({"error": "Archivo sin nombre"}), 400
+            if not allowed_file(file.filename):
+                logger.warning(f"Extensión no permitida: {file.filename}")
+                return jsonify({"error": "Tipo de archivo no permitido"}), 400
             pdf_data = file.read()
             password = request.form.get('password')
+            source = "multipart"
+        else:
+            # Intentar obtener base64 desde JSON
+            logger.debug("No se encontró archivo, intentando cargar JSON")
+            data = request.get_json()
+            if data:
+                if 'pdf_base64' in data:
+                    pdf_data = base64.b64decode(data['pdf_base64'])
+                    source = "base64"
+                    logger.debug("PDF recibido como base64")
+                else:
+                    logger.warning("Campo 'pdf_base64' no encontrado en JSON")
+                password = data.get('password')
+            else:
+                logger.warning("No se pudo cargar JSON desde la solicitud")
+                return jsonify({"error": "No PDF file provided"}), 400
 
+        # Verificar contenido del archivo
+        if not pdf_data or len(pdf_data) < 100:
+            logger.error("El PDF está vacío o corrupto")
+            return jsonify({"error": "PDF está vacío o inválido"}), 400
+
+        logger.info(f"PDF recibido correctamente desde: {source}")
+        logger.debug(f"Tamaño del PDF: {len(pdf_data)} bytes")
+        logger.debug(f"Contraseña recibida: {'sí' if password else 'no'}")
+
+        # Guardar PDF para depuración (opcional)
+        debug_path = os.path.join(UPLOAD_FOLDER, f"debug_{source}.pdf")
+        with open(debug_path, "wb") as f:
+            f.write(pdf_data)
+        logger.debug(f"PDF guardado temporalmente en {debug_path}")
+
+        # Abrir PDF
         doc, error = open_pdf_with_auth(pdf_data, password)
         if error:
+            logger.warning(f"No se pudo abrir el PDF: {error}")
             return jsonify({"error": error}), 401
 
+        # Extraer texto
         text_content = []
         for page_num in range(doc.page_count):
             page = doc.load_page(page_num)
@@ -86,7 +122,7 @@ def extract_text_webhook():
         })
 
     except Exception as e:
-        logger.error(f"Error processing PDF: {str(e)}")
+        logger.error(f"Error general al procesar PDF: {str(e)}", exc_info=True)
         return jsonify({"error": f"Error processing PDF: {str(e)}"}), 500
 
 @app.route('/webhook/extract-images', methods=['POST'])
