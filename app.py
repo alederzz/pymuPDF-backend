@@ -225,12 +225,26 @@ def pdf_info_webhook():
         return jsonify({"error": f"Error getting PDF info: {str(e)}"}), 500
 
 def open_pdf_with_auth(pdf_data, password=None):
-    doc = fitz.open(stream=pdf_data, filetype="pdf")
+    try:
+        doc = fitz.open(stream=pdf_data, filetype="pdf")
+    except Exception as e:
+        logger.error(f"No se pudo abrir el PDF: {str(e)}")
+        return None, "Error abriendo el PDF"
+
     if doc.needs_pass:
-        if not password or not doc.authenticate(password):
-            return None, "PDF is password-protected and password is missing or incorrect"
+        logger.debug("El PDF está protegido con contraseña")
+        if not password:
+            logger.warning("El PDF necesita contraseña pero no se proporcionó")
+            return None, "PDF is password-protected and no password was provided"
+        if not doc.authenticate(password):
+            logger.warning("La contraseña proporcionada es incorrecta")
+            return None, "Incorrect PDF password"
+
     if doc.page_count == 0:
-        return None, "PDF appears to be empty or password authentication failed"
+        logger.warning("El PDF no tiene páginas válidas (page_count == 0)")
+        return None, "PDF appears to be empty or corrupted"
+
+    logger.debug("El PDF fue abierto exitosamente y contiene páginas")
     return doc, None
 
 if __name__ == '__main__':
