@@ -1,10 +1,8 @@
 from flask import Flask, request, jsonify
 import fitz  # PyMuPDF
 import base64
-import io
 import os
 from werkzeug.utils import secure_filename
-import tempfile
 import logging
 
 app = Flask(__name__)
@@ -55,30 +53,20 @@ def extract_text_webhook():
             data = request.get_json()
             if data and 'pdf_base64' in data:
                 pdf_data = base64.b64decode(data['pdf_base64'])
-                password = data.get('password') if data else None
-                doc = fitz.open(stream=pdf_data, filetype="pdf")
-                if doc.needs_pass:
-                    if not password or not doc.authenticate(password):
-                        return jsonify({"error": "PDF is password-protected and password is missing or incorrect"}), 401
+                password = data.get('password')
             else:
                 return jsonify({"error": "No PDF file provided"}), 400
         else:
             file = request.files['file']
-            if file.filename == '':
-                return jsonify({"error": "No file selected"}), 400
-
-            if not allowed_file(file.filename):
-                return jsonify({"error": "Invalid file type. Only PDF allowed"}), 400
-
-            # Leer archivo directamente en memoria
+            if file.filename == '' or not allowed_file(file.filename):
+                return jsonify({"error": "Invalid or missing PDF file"}), 400
             pdf_data = file.read()
             password = request.form.get('password')
-            doc = fitz.open(stream=pdf_data, filetype="pdf")
-            if doc.needs_pass:
-                if not password or not doc.authenticate(password):
-                    return jsonify({"error": "PDF is password-protected and password is missing or incorrect"}), 401
 
-        # Extraer texto de todas las páginas
+        doc, error = open_pdf_with_auth(pdf_data, password)
+        if error:
+            return jsonify({"error": error}), 401
+
         text_content = []
         for page_num in range(doc.page_count):
             page = doc.load_page(page_num)
@@ -90,15 +78,12 @@ def extract_text_webhook():
 
         doc.close()
 
-        # Preparar respuesta
-        response = {
+        return jsonify({
             "success": True,
             "pages": len(text_content),
             "content": text_content,
             "full_text": "\n\n".join([page["text"] for page in text_content])
-        }
-
-        return jsonify(response)
+        })
 
     except Exception as e:
         logger.error(f"Error processing PDF: {str(e)}")
@@ -113,41 +98,29 @@ def extract_images_webhook():
             data = request.get_json()
             if data and 'pdf_base64' in data:
                 pdf_data = base64.b64decode(data['pdf_base64'])
-                password = data.get('password') if data else None
-                doc = fitz.open(stream=pdf_data, filetype="pdf")
-                if doc.needs_pass:
-                    if not password or not doc.authenticate(password):
-                        return jsonify({"error": "PDF is password-protected and password is missing or incorrect"}), 401
+                password = data.get('password')
             else:
                 return jsonify({"error": "No PDF file provided"}), 400
         else:
             file = request.files['file']
-            if file.filename == '':
-                return jsonify({"error": "No file selected"}), 400
-
-            if not allowed_file(file.filename):
-                return jsonify({"error": "Invalid file type. Only PDF allowed"}), 400
-
+            if file.filename == '' or not allowed_file(file.filename):
+                return jsonify({"error": "Invalid or missing PDF file"}), 400
             pdf_data = file.read()
             password = request.form.get('password')
-            doc = fitz.open(stream=pdf_data, filetype="pdf")
-            if doc.needs_pass:
-                if not password or not doc.authenticate(password):
-                    return jsonify({"error": "PDF is password-protected and password is missing or incorrect"}), 401
+
+        doc, error = open_pdf_with_auth(pdf_data, password)
+        if error:
+            return jsonify({"error": error}), 401
 
         images = []
         for page_num in range(doc.page_count):
             page = doc.load_page(page_num)
-            image_list = page.get_images()
-
-            for img_index, img in enumerate(image_list):
+            for img_index, img in enumerate(page.get_images()):
                 xref = img[0]
                 pix = fitz.Pixmap(doc, xref)
-
-                if pix.n - pix.alpha < 4:  # Solo RGB o escala de grises
+                if pix.n - pix.alpha < 4:
                     img_data = pix.tobytes("png")
                     img_base64 = base64.b64encode(img_data).decode()
-
                     images.append({
                         "page": page_num + 1,
                         "image_index": img_index,
@@ -155,17 +128,13 @@ def extract_images_webhook():
                         "base64": img_base64
                     })
 
-                pix = None
-
         doc.close()
 
-        response = {
+        return jsonify({
             "success": True,
             "images_found": len(images),
             "images": images
-        }
-
-        return jsonify(response)
+        })
 
     except Exception as e:
         logger.error(f"Error extracting images: {str(e)}")
@@ -179,43 +148,31 @@ def pdf_info_webhook():
             data = request.get_json()
             if data and 'pdf_base64' in data:
                 pdf_data = base64.b64decode(data['pdf_base64'])
-                password = data.get('password') if data else None
-                doc = fitz.open(stream=pdf_data, filetype="pdf")
-                if doc.needs_pass:
-                    if not password or not doc.authenticate(password):
-                        return jsonify({"error": "PDF is password-protected and password is missing or incorrect"}), 401
+                password = data.get('password')
             else:
                 return jsonify({"error": "No PDF file provided"}), 400
         else:
             file = request.files['file']
-            if file.filename == '':
-                return jsonify({"error": "No file selected"}), 400
-
-            if not allowed_file(file.filename):
-                return jsonify({"error": "Invalid file type. Only PDF allowed"}), 400
-
+            if file.filename == '' or not allowed_file(file.filename):
+                return jsonify({"error": "Invalid or missing PDF file"}), 400
             pdf_data = file.read()
             password = request.form.get('password')
-            doc = fitz.open(stream=pdf_data, filetype="pdf")
-            if doc.needs_pass:
-                if not password or not doc.authenticate(password):
-                    return jsonify({"error": "PDF is password-protected and password is missing or incorrect"}), 401
+
+        doc, error = open_pdf_with_auth(pdf_data, password)
+        if error:
+            return jsonify({"error": error}), 401
 
         # Obtener metadatos
         metadata = doc.metadata
-
-        # Contar páginas e imágenes
-        total_images = 0
-        for page_num in range(doc.page_count):
-            page = doc.load_page(page_num)
-            total_images += len(page.get_images())
+        total_images = sum(len(doc.load_page(p).get_images()) for p in range(doc.page_count))
+        total_pages = doc.page_count
 
         doc.close()
 
-        response = {
+        return jsonify({
             "success": True,
             "info": {
-                "pages": doc.page_count,
+                "pages": total_pages,
                 "title": metadata.get('title', ''),
                 "author": metadata.get('author', ''),
                 "subject": metadata.get('subject', ''),
@@ -225,13 +182,20 @@ def pdf_info_webhook():
                 "modification_date": metadata.get('modDate', ''),
                 "total_images": total_images
             }
-        }
-
-        return jsonify(response)
+        })
 
     except Exception as e:
         logger.error(f"Error getting PDF info: {str(e)}")
         return jsonify({"error": f"Error getting PDF info: {str(e)}"}), 500
+
+def open_pdf_with_auth(pdf_data, password=None):
+    doc = fitz.open(stream=pdf_data, filetype="pdf")
+    if doc.needs_pass:
+        if not password or not doc.authenticate(password):
+            return None, "PDF is password-protected and password is missing or incorrect"
+    if doc.page_count == 0:
+        return None, "PDF appears to be empty or password authentication failed"
+    return doc, None
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
