@@ -29,6 +29,21 @@ logger = logging.getLogger(__name__)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def save_temp_pdf(pdf_data: bytes, filename: str) -> str:
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+    try:
+        with open(filepath, 'wb') as f:
+            f.write(pdf_data)
+        logger.debug(f"Archivo PDF guardado exitosamente en: {filepath}")
+        logger.debug(f"Tamaño del archivo guardado: {os.path.getsize(filepath)} bytes")
+    except PermissionError as e:
+        logger.error(f"Error de permisos al guardar PDF en {filepath}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error desconocido al guardar PDF en {filepath}: {str(e)}")
+
+    return filepath
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Endpoint de health check"""
@@ -91,9 +106,7 @@ def extract_text_webhook():
         logger.debug(f"Contraseña recibida: {'sí' if password else 'no'}")
 
         # Guardar PDF para depuración (opcional)
-        debug_path = os.path.join(UPLOAD_FOLDER, f"debug_{source}.pdf")
-        with open(debug_path, "wb") as f:
-            f.write(pdf_data)
+        debug_path = save_temp_pdf(pdf_data, 'debug_multipart.pdf')
         logger.debug(f"PDF guardado temporalmente en {debug_path}")
 
         # Abrir PDF
@@ -227,6 +240,7 @@ def pdf_info_webhook():
 def open_pdf_with_auth(pdf_data, password=None):
     try:
         doc = fitz.open(stream=pdf_data, filetype="pdf")
+        logger.debug(f"Contraseña (raw): {repr(password)}")
     except Exception as e:
         logger.error(f"No se pudo abrir el PDF: {str(e)}")
         return None, "Error abriendo el PDF"
