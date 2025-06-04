@@ -1,5 +1,5 @@
-# Usar imagen base de Python 3.11 slim
-FROM python:3.11-slim
+# Usar imagen base de Python 3.13 slim
+FROM python:3.13-slim
 
 # Instalar dependencias del sistema necesarias para PyMuPDF
 RUN apt-get update && apt-get install -y \
@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libffi-dev \
     libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libmupdf-dev \
+    curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Establecer directorio de trabajo
 WORKDIR /app
@@ -16,6 +18,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Instalar dependencias de Python
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código de la aplicación
